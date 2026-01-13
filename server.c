@@ -74,23 +74,33 @@ int main() {
   fd_adr.sin_port = htons(8080);
   fd_adr.sin_addr.s_addr = INADDR_ANY;
 
-  if(bind(socket_fd, (struct sockaddr*)&fd_adr, sizeof(fd_adr)) < 0) {
-    die("Bind error");
-  }
-  if(listen(socket_fd, 10) < 0) {
-    die("Listen error");
-  }
+  if(bind(socket_fd, (struct sockaddr*)&fd_adr, sizeof(fd_adr)) < 0) die("Bind error");
+  if(listen(socket_fd, 10) < 0) die("Listen error");
   
   struct pollfd pfds[MAX_CLIENTS + 1];
+  int nfds = 2;
+
+  // Listening socket init
+  pfds[0].fd = socket_fd;
+  pfds[0].events = POLLIN;
+
+  // Admin stdin
+  pfds[1].fd = STDIN_FILENO;
+  pfds[1].events = POLLIN;
+
+  // Init clinets sockets
+  for(int i = 0; i < MAX_CLIENTS; i++) {
+    pfds[i].fd = -1;
+    pfds[i].events = POLLIN;
+  }
 
   while(1) {
-    //int ret = poll(pfds, );
-
-    int client_fd = accept(socket_fd, NULL, NULL);
-    if(client_fd < 0) {
-      die("Client socket error");
+    int ret = poll(pfds, -1);
+    if(ret < 0) die("Poll error");
+    
+    if(pfds[1].revents && POLLIN) {
+    
     }
-
   }
 
 
