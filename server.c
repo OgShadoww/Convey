@@ -89,17 +89,49 @@ int main() {
   pfds[1].events = POLLIN;
 
   // Init clinets sockets
-  for(int i = 0; i < MAX_CLIENTS; i++) {
+  for(int i = 2; i < MAX_CLIENTS + 2; i++) {
     pfds[i].fd = -1;
     pfds[i].events = POLLIN;
   }
 
   while(1) {
-    int ret = poll(pfds, -1);
+    write(STDOUT_FILENO, "> ", 2);
+    int ret = poll(pfds, nfds, -1);
     if(ret < 0) die("Poll error");
     
-    if(pfds[1].revents && POLLIN) {
-    
+    // Admin panel
+    if(pfds[1].revents & POLLIN) {
+      printf("Please write the command for the admin: ");
+      char buffer[256];
+      size_t n = read(STDIN_FILENO, buffer, 256);
+
+      if(n > 0) {
+        write(STDOUT_FILENO, buffer, n);
+      }
+
+      continue;
+    }
+    // Listening socket check
+    else if(pfds[0].revents & POLLIN) {
+      int client_fd = accept(socket_fd, NULL, NULL);
+      if(client_fd < 0) perror("Client connection error");
+
+      for(int i = 2; i < MAX_CLIENTS + 2; i++) {
+        if(pfds[i].fd == -1) {
+          pfds[i].fd = client_fd;
+          
+          nfds++;
+          write(STDOUT_FILENO, "Connection found \n", 18);
+          break;
+        }
+      }
+    }
+    for(int i = 2; i < nfds; i++) {
+      if(pfds[i].fd == -1) continue;
+
+      if(pfds[i].revents && POLLIN) {
+        
+      }
     }
   }
 
