@@ -5,6 +5,7 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include <poll.h>
+#include "uttils.h"
 
 #define MAX_CLIENTS 64
 #define PORT 8080
@@ -19,11 +20,6 @@ typedef struct {
   int size;
   int capacity;
 } Map;
-
-static void die(const char *msg) {
-  perror(msg);
-  exit(EXIT_FAILURE);
-}
 
 Map *init_map() {
   Map *m = malloc(sizeof(Map));
@@ -53,7 +49,7 @@ int map_insert(Map *m, char *key, int value) {
   return 1;
 }
 
-int map_get(Map *m, char *key) {
+int map_get_val(Map *m, char *key) {
   for(int i = 0; i < m->size; i++) {
     if(strcmp(key, m->entries[i].key) == 0) {
       return m->entries[i].value;
@@ -63,7 +59,21 @@ int map_get(Map *m, char *key) {
   return -1;
 }
 
+char *map_get_key(Map *m, int value) {
+  for(int i = 0; i < m->size; i++) {
+    if(value == m->entries[i].value) {
+      return m->entries[i].key;
+    }
+  }
+
+  return NULL;
+}
+
+
 int main() {
+  // Users map
+  Map *Users = init_map();
+
   int socket_fd = socket(AF_INET, SOCK_STREAM, 0); 
   if(socket_fd < 0) {
     die("Socket error");
@@ -119,9 +129,18 @@ int main() {
       for(int i = 2; i < MAX_CLIENTS + 2; i++) {
         if(pfds[i].fd == -1) {
           pfds[i].fd = client_fd;
-          
           nfds++;
-          write(STDOUT_FILENO, "Connection found \n", 18);
+
+          char name[128];
+          int n = read(client_fd, name, sizeof(name));
+          name[n] = '\n';
+ 
+          write(STDOUT_FILENO, ">", 1);
+          write(STDOUT_FILENO, "Connection found", 18);
+          write(STDOUT_FILENO, name, n);
+          write(STDOUT_FILENO, "\n", 1);
+
+          map_insert(Users, name, client_fd);
           break;
         }
       }
@@ -130,7 +149,10 @@ int main() {
       if(pfds[i].fd == -1) continue;
 
       if(pfds[i].revents && POLLIN) {
+        char buffer[256];
+        int n = read(pfds[i].fd, buffer, sizeof(buffer));
         
+        dprintf(STDOUT_FILENO, "The client %s wrote : %s\n", map_get_key(Users, pfds[i].fd), buffer);
       }
     }
   }
