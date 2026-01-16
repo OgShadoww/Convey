@@ -1,16 +1,28 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <fcntl.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <arpa/inet.h>
 
 int main() {
-  char buffer[1024];
-  int file_fd = open("main.txt", O_RDONLY);
-  int new_file_fd = open("main2", O_WRONLY);
+  int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 
-  while(read(file_fd, buffer, 1024) > 0) { 
-    //write(new_file_fd, buffer, 1024);
-    
+  struct sockaddr_in addr;
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(8080);
+  inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+
+  connect(socket_fd, (struct sockaddr*)&addr, sizeof(addr)); 
+  write(socket_fd, "Hello", 5);
+  write(socket_fd, "World", 5);
+
+  while(1) {
+
   }
+
+  close(socket_fd);
 
   return 0;
 }
