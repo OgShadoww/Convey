@@ -5,6 +5,7 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include <poll.h>
+#include <fcntl.h>
 #include "uttils.h"
 
 #define MAX_CLIENTS 64
@@ -87,8 +88,8 @@ int main() {
   if(bind(socket_fd, (struct sockaddr*)&fd_adr, sizeof(fd_adr)) < 0) die("Bind error");
   if(listen(socket_fd, 10) < 0) die("Listen error");
   
-  struct pollfd pfds[MAX_CLIENTS + 1];
-  int nfds = 2;
+  struct pollfd pfds[MAX_CLIENTS + 2];
+  int nfds = MAX_CLIENTS + 2;
 
   // Listening socket init
   pfds[0].fd = socket_fd;
@@ -133,14 +134,14 @@ int main() {
 
           char name[128];
           int n = read(client_fd, name, sizeof(name));
-          name[n] = '\n';
+          name[n] = '\0';
  
           write(STDOUT_FILENO, ">", 1);
           write(STDOUT_FILENO, "Connection found", 18);
           write(STDOUT_FILENO, name, n);
           write(STDOUT_FILENO, "\n", 1);
 
-          map_insert(Users, name, client_fd);
+          map_insert(Users, strdup(name), client_fd);
           break;
         }
       }
@@ -148,11 +149,13 @@ int main() {
     for(int i = 2; i < nfds; i++) {
       if(pfds[i].fd == -1) continue;
 
-      if(pfds[i].revents && POLLIN) {
+      if(pfds[i].revents & POLLIN) {
         char buffer[256];
-        int n = read(pfds[i].fd, buffer, sizeof(buffer));
+        int file_fd = open("test", O_APPEND | O_CREAT, 0644);
+        size_t n = read(pfds[i].fd, buffer, sizeof(buffer));
+        write(file_fd, buffer, n);
         
-        dprintf(STDOUT_FILENO, "The client %s wrote : %s\n", map_get_key(Users, pfds[i].fd), buffer);
+        close(file_fd);
       }
     }
   }
