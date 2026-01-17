@@ -12,8 +12,8 @@
 #define PORT 8080
 
 typedef struct {
-  char *key;
-  int value;
+  int key;
+  char *value;
 } MapEntry;
 
 typedef struct {
@@ -22,21 +22,21 @@ typedef struct {
   int capacity;
 } Map;
 
-Map *init_map() {
+static Map *init_map() {
   Map *m = malloc(sizeof(Map));
   // Make error check
   m->size = 0;
   m->capacity = 64;
   m->entries = malloc(sizeof(MapEntry)*m->capacity);
   for(int i = 0; i < m->capacity; i++) {
-    m->entries[i].key = NULL;
-    m->entries[i].value = 0;  
+    m->entries[i].key = -1;
+    m->entries[i].value = NULL;  
   }
 
   return m;
 }
 
-int map_insert(Map *m, char *key, int value) {
+static int map_insert(Map *m, int key, char *value) {
   if(m->size >= m->capacity) {
     m->capacity *= 2;
     m->entries = realloc(m->entries, sizeof(MapEntry)*m->capacity);
@@ -50,24 +50,27 @@ int map_insert(Map *m, char *key, int value) {
   return 1;
 }
 
-int map_get_val(Map *m, char *key) {
+static char *map_get(Map *m, int key) {
   for(int i = 0; i < m->size; i++) {
-    if(strcmp(key, m->entries[i].key) == 0) {
+    if(key == m->entries[i].key) {
       return m->entries[i].value;
     }
   }
 
-  return -1;
+  return NULL;
 }
 
-char *map_get_key(Map *m, int value) {
+static int map_erase(Map *m, int key) {
   for(int i = 0; i < m->size; i++) {
-    if(value == m->entries[i].value) {
-      return m->entries[i].key;
+    if(key == m->entries[i].key) {
+      free(m->entries[i].value);
+      m->entries[i].key = -1;
+      m->entries[i].value = NULL;
+      return 1;
     }
   }
 
-  return NULL;
+  return -1;
 }
 
 
@@ -125,12 +128,14 @@ int main() {
     // Listening socket check
     else if(pfds[0].revents & POLLIN) {
       int client_fd = accept(socket_fd, NULL, NULL);
-      if(client_fd < 0) perror("Client connection error");
+      if(client_fd < 0) {
+        perror("Client connection error");
+        continue;
+      }
 
       for(int i = 2; i < MAX_CLIENTS + 2; i++) {
         if(pfds[i].fd == -1) {
           pfds[i].fd = client_fd;
-          nfds++;
 
           char name[128];
           int n = read(client_fd, name, sizeof(name));
@@ -141,7 +146,7 @@ int main() {
           write(STDOUT_FILENO, name, n);
           write(STDOUT_FILENO, "\n", 1);
 
-          map_insert(Users, strdup(name), client_fd);
+          map_insert(Users, client_fd, strdup(name));
           break;
         }
       }
@@ -151,7 +156,7 @@ int main() {
 
       if(pfds[i].revents & POLLIN) {
         char buffer[256];
-        int file_fd = open("test", O_APPEND | O_CREAT, 0644);
+        int file_fd = open("test", O_WRONLY | O_CREAT | O_APPEND, 0644);
         size_t n = read(pfds[i].fd, buffer, sizeof(buffer));
         write(file_fd, buffer, n);
         
