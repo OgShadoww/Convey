@@ -73,7 +73,6 @@ static int map_erase(Map *m, int key) {
   return -1;
 }
 
-
 int main() {
   // Users map
   Map *Users = init_map();
@@ -109,7 +108,7 @@ int main() {
   }
 
   while(1) {
-    write(STDOUT_FILENO, "> ", 2);
+    write(STDOUT_FILENO, "> \n", 3);
     int ret = poll(pfds, nfds, -1);
     if(ret < 0) die("Poll error");
     
@@ -141,7 +140,6 @@ int main() {
           int n = read(client_fd, name, sizeof(name));
           name[n] = '\0';
  
-          write(STDOUT_FILENO, ">", 1);
           write(STDOUT_FILENO, "Connection found", 18);
           write(STDOUT_FILENO, name, n);
           write(STDOUT_FILENO, "\n", 1);
@@ -156,11 +154,32 @@ int main() {
 
       if(pfds[i].revents & POLLIN) {
         char buffer[256];
-        int file_fd = open("test", O_WRONLY | O_CREAT | O_APPEND, 0644);
-        size_t n = read(pfds[i].fd, buffer, sizeof(buffer));
-        write(file_fd, buffer, n);
-        
-        close(file_fd);
+        ssize_t n = read(pfds[i].fd, buffer, sizeof(buffer));
+
+        if (n == 0) {
+          // Disconnect
+          close(pfds[i].fd);
+          map_erase(Users, pfds[i].fd);
+          pfds[i].fd = -1;
+          pfds[i].revents = 0;
+          continue;
+        }
+        if (n < 0) {
+          // Error
+          close(pfds[i].fd);
+          map_erase(Users, pfds[i].fd);
+          pfds[i].fd = -1;
+          pfds[i].revents = 0;
+          continue;
+        }
+
+        char *name = map_get(Users, pfds[i].fd);
+        name[strcspn(name, "\r\n")] = '\0';
+        int file_fd = open(name, O_WRONLY | O_CREAT | O_APPEND, 0644);
+        if (file_fd >= 0) {
+          write(file_fd, buffer, (size_t)n);
+          close(file_fd);
+        }      
       }
     }
   }
