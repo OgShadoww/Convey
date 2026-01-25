@@ -7,3 +7,5 @@ C-share is uttilite to share file across the local network. The main idea is: se
 - Make authorization
 - Use ciphering
 - Host to VPS server
+- Use database
+- Use Docker
