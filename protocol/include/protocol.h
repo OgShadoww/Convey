@@ -1,6 +1,8 @@
 #include <cstdint>
 #include <unistd.h>
 
+typedef uint8_t *Message;
+
 typedef enum {
   MSG_AUTH_REGISTER,
   MSG_AUTH_LOGIN,
@@ -21,7 +23,7 @@ typedef struct {
 
 typedef struct {
   ConveyHeader h;
-  uint8_t *payload;
+  Message payload;
 } ConveyFrame;
 
 typedef struct {
@@ -39,11 +41,14 @@ ssize_t conn_read(int fd, void *buff, size_t n);
 ssize_t conn_write(int fd, void *buff, size_t n);
 
 int read_header(int fd, ConveyHeader *h);
-int read_payload(int fd, uint8_t *p);
+int read_payload(int fd, Message p);
 int write_header(int fd, ConveyHeader *h);
-int write_payload(int fd, uint8_t *p);
+int write_payload(int fd, Message p);
 
 int read_frame(int fd, ConveyFrame *f);
 int write_frame(int fd, ConveyFrame *f);
 
 int free_frame(ConveyFrame *f);
+
+int write_u8(Message msg);
+int write_u32(Message msg);
