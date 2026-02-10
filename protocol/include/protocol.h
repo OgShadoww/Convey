@@ -1,7 +1,11 @@
 #include <cstdint>
 #include <unistd.h>
 
-typedef uint8_t *Message;
+typedef struct {
+  uint8_t *data;
+  size_t len;
+  size_t pos;
+} Buff;
 
 typedef enum {
   MSG_AUTH_REGISTER,
@@ -14,6 +18,10 @@ typedef enum {
   MSG_OK
 } ConveyMsgType;
 
+#define CONVEY_MAGIC 0x43565931u
+#define CONVEY_HEADER_LEN 10
+#define CONVEY_MAX_PAYLOAD (8u * 1024u * 1024u)
+
 typedef struct {
   uint32_t magic;
   uint8_t version;
@@ -23,7 +31,7 @@ typedef struct {
 
 typedef struct {
   ConveyHeader h;
-  Message payload;
+  Buff payload;
 } ConveyFrame;
 
 typedef struct {
@@ -37,18 +45,27 @@ typedef struct {
   char confirmed_password[128];
 } MsgRegister;
 
+// Transportation
 ssize_t conn_read(int fd, void *buff, size_t n);
-ssize_t conn_write(int fd, void *buff, size_t n);
+ssize_t conn_write(int fd, const void *buff, size_t n);
 
-int read_header(int fd, ConveyHeader *h);
-int read_payload(int fd, Message p);
-int write_header(int fd, ConveyHeader *h);
-int write_payload(int fd, Message p);
+// Exact
+int read_exact(int fd, void *buff, size_t len);
+int write_all(int fd, const void *buff, size_t len);
 
+// Framing
 int read_frame(int fd, ConveyFrame *f);
 int write_frame(int fd, ConveyFrame *f);
+void free_frame(ConveyFrame *f);
 
-int free_frame(ConveyFrame *f);
+// Write / Read exact bytes to buffer
+int buf_write_u8(Buff *b, uint8_t v);
+int buf_write_u32(Buff *b, uint32_t v);
+int buf_read_u8(Buff *b, uint8_t *out);
+int buf_read_u32(Buff *b, uint32_t *out);
 
-int write_u8(Message msg);
-int write_u32(Message msg);
+// Encode / Decode header bytes
+int decode_header(Buff *b, ConveyHeader *h);
+int encode_header(Buff *b, ConveyHeader *h);
+
+
