@@ -1,4 +1,4 @@
-#include <cstdint>
+#include <stdint.h>
 #include <unistd.h>
 
 typedef struct {
@@ -21,6 +21,7 @@ typedef enum {
 #define CONVEY_MAGIC 0x43565931u
 #define CONVEY_HEADER_LEN 10
 #define CONVEY_MAX_PAYLOAD (8u * 1024u * 1024u)
+#define CONVEY_VERSION 1
 
 typedef struct {
   uint32_t magic;
@@ -67,5 +68,3 @@ int buf_read_u32(Buff *b, uint32_t *out);
 // Encode / Decode header bytes
 int decode_header(Buff *b, ConveyHeader *h);
 int encode_header(Buff *b, ConveyHeader *h);
-
-
