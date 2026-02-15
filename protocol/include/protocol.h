@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <stdint.h>
 #include <unistd.h>
 
@@ -35,8 +36,9 @@ typedef struct {
   Buff payload;
 } ConveyFrame;
 
+// In the binary first 16 bits contain length
 typedef struct {
-  char username[128];
+  char *username;
   char password[128];
 } MsgLogin;
 
@@ -45,6 +47,23 @@ typedef struct {
   char password[128];
   char confirmed_password[128];
 } MsgRegister;
+
+typedef struct {
+  char file_name[128];
+  uint64_t file_len;
+} MsgPutInit;
+
+typedef struct {
+  uint64_t upload_id;
+  uint64_t offset;
+  uint32_t chunk_len;
+  uint8_t *chunk_bytes;
+} MsgPutChunk;
+
+typedef struct {
+  uint64_t upload_id;
+  uint64_t file_len;
+} MsgPutFinish;
 
 // Transportation
 ssize_t conn_read(int fd, void *buff, size_t n);
@@ -61,10 +80,16 @@ void free_frame(ConveyFrame *f);
 
 // Write / Read exact bytes to buffer
 int buff_write_u8(Buff *b, uint8_t v);
+int buff_write_u16(Buff *b, uint16_t v);
 int buff_write_u32(Buff *b, uint32_t v);
 int buff_read_u8(Buff *b, uint8_t *out);
+int buff_read_u16(Buff *b, uint16_t *out);
 int buff_read_u32(Buff *b, uint32_t *out);
 
 // Encode / Decode header bytes
 int decode_header(Buff *b, ConveyHeader *h);
 int encode_header(Buff *b, ConveyHeader *h);
+
+// Encode / Decode payloads bytes
+int decode_payload_login(Buff *b, MsgLogin *p);
+int encode_payload_login(Buff *b, MsgLogin *p);
