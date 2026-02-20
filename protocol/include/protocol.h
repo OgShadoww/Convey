@@ -31,13 +31,13 @@ typedef struct {
 } ConveyHeader;
 
 typedef struct {
-  ConveyHeader h;
+  ConveyHeader header;
   Buff payload;
 } ConveyFrame;
 
 // In the binary first 16 bits contain length
 typedef struct {
-  char *username;
+  char username[128];
   char password[128];
 } MsgLogin;
 
@@ -90,5 +90,10 @@ int decode_header(Buff *b, ConveyHeader *h);
 int encode_header(Buff *b, ConveyHeader *h);
 
 // Encode / Decode payloads bytes
+
+// Login payload rules: The first 16 bits is length of the name, and length of the password after the name
 int decode_payload_login(Buff *b, MsgLogin *p);
 int encode_payload_login(Buff *b, MsgLogin *p);
+
+// OK 
+int send_ok(int fd);
