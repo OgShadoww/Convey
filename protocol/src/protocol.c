@@ -9,18 +9,21 @@
 #include <fcntl.h>
 #include "../include/protocol.h"
 
-// Conn functions
+// ===============================
+// BufferLOW-LEVEL CONNECTION I/O
+// ===============================
+
 ssize_t conn_write(int fd, const void *buff, size_t n) {
-  int r = write(fd, buff, n);
+  ssize_t r = write(fd, buff, n);
   if(r < 0) return -1;
-  return (ssize_t)r;
+  return r;
 }
 
 ssize_t conn_read(int fd, void *buff, size_t n) {
-  int r = read(fd, buff, n);
+  ssize_t r = read(fd, buff, n);
   if(r < 0) return -1;
 
-  return (ssize_t)r;
+  return r;
 }
 
 int read_exact(int fd, void *buff, size_t len) {
@@ -29,10 +32,7 @@ int read_exact(int fd, void *buff, size_t len) {
 
   while(total < len) {
     ssize_t n = conn_read(fd, p+total, len-total);
-
-    if(n == 0) return -1;
-    if(n < 0) return -1;
-
+    if(n <= 0) return -1;
     total += n;
   }
   
@@ -45,15 +45,18 @@ int write_all(int fd, const void *buff, size_t len) {
 
   while(total < len) {
     ssize_t n = conn_write(fd, p+total, len-total);
-
     if (n <= 0) return -1;
-
     total += (size_t)n;
   }
 
   return 0;
 }
 
+// ===============================
+// BUFFER OPERATIONS
+// ===============================
+
+// Write Operations
 int buff_write_u8(Buff *b, uint8_t v) {
   if(b->pos + 1 > b->len) return -1;
   b->data[b->pos++] = v;
@@ -83,6 +86,7 @@ int buff_write_u32(Buff *b, uint32_t v) {
   return 0;
 }
 
+// Read Operations
 int buff_read_u8(Buff *b, uint8_t *out) {
   if(b->pos + 1 > b->len) return -1;
   *out = b->data[b->pos++];
@@ -117,6 +121,9 @@ int buff_read_u32(Buff *b, uint32_t *out) {
 
   return 0;
 }
+// ===============================
+// FRAME HEADER OPERATIONS
+// ===============================
 
 int encode_header(Buff *b, ConveyHeader *h) {
   if(buff_write_u32(b, h->magic) == -1) return -1;
@@ -128,23 +135,28 @@ int encode_header(Buff *b, ConveyHeader *h) {
 }
 
 int decode_header(Buff *b, ConveyHeader *h) {
-  buff_read_u32(b, &h->magic);
-  buff_read_u8(b, &h->version);
-  buff_read_u8(b, &h->type);
-  buff_read_u32(b, &h->payload_len);
+  if(buff_read_u32(b, &h->magic) == -1)  return -1;
+  if(buff_read_u8(b, &h->version) == -1) return -1;
+  if(buff_read_u8(b, &h->type) == -1) return -1;
+  if(buff_read_u32(b, &h->payload_len) == -1) return -1;
 
   return 0;
 }
 
+// ===============================
+// MESSAGE PAYLOAD OPERATIONS
+// ===============================
+
+// Login decode/encode
 int decode_payload_login(Buff *b, MsgLogin *p) {
   uint16_t ul = 0, pl = 0;
   if(buff_read_u16(b, &ul) == -1) return -1;
 
-  if(ul >= sizeof(p->username)) return -1;
+  if(ul >= sizeof(p->username)+1) return -1;
 
   for(int i = 0; i < (int)ul; i++) {
     uint8_t ch;
-    buff_read_u8(b, &ch);
+    if(buff_read_u8(b, &ch) == -1) return -1;
 
     p->username[i] = (char)ch;
   }
@@ -152,15 +164,15 @@ int decode_payload_login(Buff *b, MsgLogin *p) {
 
   if(buff_read_u16(b, &pl) == -1) return -1;
 
-  if(ul >= sizeof(p->password)) return -1;
+  if(pl >= sizeof(p->password)+1) return -1;
 
   for(int i = 0; i < pl; i++) {
     uint8_t ch;
-    buff_read_u8(b, &ch);
+    if(buff_read_u8(b, &ch) == -1) return -1;
 
     p->password[i] = (char)ch;
   }
-  p->password[ul] = '\0';
+  p->password[pl] = '\0';
 
   return 0;
 }
@@ -168,17 +180,46 @@ int decode_payload_login(Buff *b, MsgLogin *p) {
 int encode_payload_login(Buff *b, MsgLogin *p) {
   uint16_t ul = strlen(p->username);
   uint16_t pl = strlen(p->password);
-  buff_write_u16(b, ul);
+
+  if (b->pos + (size_t)(2 + ul + 2 + pl) > b->len) return -1;
+
+  if(buff_write_u16(b, ul) == -1) return -1;
   for(int i = 0; i < ul; i++) {
-    buff_write_u8(b, (uint8_t)p->username[i]);
+    if(buff_write_u8(b, (uint8_t)p->username[i]) == -1) return -1;
   }
-  buff_write_u16(b, pl);
+  if(buff_write_u16(b, pl) == -1) return -1;
   for(int i = 0; i < pl; i++) {
-    buff_write_u8(b, (uint8_t)p->password[i]);
+    if(buff_write_u8(b, (uint8_t)p->password[i]) == -1) return -1;
   }
 
   return 0;
 }
+
+// OK 
+int send_ok(int fd) {
+  ConveyFrame f = { 
+    .header = {
+      .magic = CONVEY_MAGIC,
+      .version = CONVEY_VERSION,
+      .type = MSG_OK,
+      .payload_len = 0
+    },
+    .payload = { 
+      .data = NULL,
+      .pos = 0,
+      .len = 0
+    }
+  };
+
+  write_frame(fd, &f);
+
+  return 1;
+}
+
+
+// ===============================
+// FRAME OPERATIONS READ / WRITE
+// ===============================
 
 int read_frame(int fd, ConveyFrame *f) {
   // Read header
@@ -186,16 +227,26 @@ int read_frame(int fd, ConveyFrame *f) {
   if(read_exact(fd, header_bytes, CONVEY_HEADER_LEN) == -1) return -1;
 
   Buff b = {.data = header_bytes, .len = CONVEY_HEADER_LEN, .pos = 0};
-  if(decode_header(&b, &f->h) == -1) return -1;
+  if(decode_header(&b, &f->header) == -1) return -1;
 
-  if(f->h.payload_len > CONVEY_MAX_PAYLOAD) return -1;
+  if(f->header.magic != CONVEY_MAGIC || f->header.payload_len > CONVEY_MAX_PAYLOAD || f->header.version != CONVEY_VERSION) return -1;
 
-  f->payload.data = malloc(f->h.payload_len);
-  if(!f->payload.data) return -1;
-  f->payload.len = f->h.payload_len;
+  if(f->header.payload_len > 0) {
+    f->payload.data = malloc(f->header.payload_len);
+    if(f->payload.data == NULL) return -1;
+  }
+  else {
+    f->payload.data = NULL;
+  }
+  f->payload.len = f->header.payload_len;
   f->payload.pos = 0;
 
-  if(read_exact(fd, f->payload.data, f->h.payload_len) == -1) return -1;
+  if(read_exact(fd, f->payload.data, f->header.payload_len) == -1) {
+    if(f->payload.len > 0) {
+      free(f->payload.data);
+    }
+    return -1;
+  }
 
   return 0;
 }
@@ -205,14 +256,14 @@ int write_frame(int fd, ConveyFrame *f) {
   uint8_t header_bytes[CONVEY_HEADER_LEN];
   Buff hb = {.data = header_bytes, .len = CONVEY_HEADER_LEN, .pos = 0};
 
-  f->h.payload_len = (uint32_t)f->payload.len;
+  f->header.payload_len = (uint32_t)f->payload.len;
 
-  if(encode_header(&hb, &f->h) == -1) return -1;
+  if(encode_header(&hb, &f->header) == -1) return -1;
   if(write_all(fd, header_bytes, CONVEY_HEADER_LEN) == -1) return -1;
 
   // Write payload
   if(f->payload.len > 0) {
-    if(!f->payload.data) return -1;
+    if(f->payload.data == NULL) return -1;
     if(write_all(fd, f->payload.data, f->payload.len) == -1) return -1;
   }
 
@@ -226,35 +277,6 @@ void free_frame(ConveyFrame *f) {
   f->payload.pos = 0;
 }
 
-// Testing
-int main(void) {
-  int fd = open("test.txt", O_WRONLY);
+int main() {
 
-  // in
-  ConveyHeader in = {
-    .magic = CONVEY_MAGIC,
-    .version = 0x01,
-    .type = MSG_OK,
-    .payload_len = CONVEY_HEADER_LEN
-  };
-  Buff *binary_in = malloc(sizeof(Buff));
-  binary_in->data = malloc(sizeof(uint8_t)*CONVEY_HEADER_LEN);
-  binary_in->pos = 0;
-  binary_in->len = CONVEY_HEADER_LEN;
-  encode_header(binary_in, &in);
-  write_all(fd, binary_in->data, CONVEY_HEADER_LEN);
-  close(fd);
-
-  int fd2 = open("test.txt", O_RDONLY);
-  // Out
-  int out = open("test.txt", O_RDONLY);
-  ConveyFrame f;
-  read_frame(out, &f);
-
-  printf("%02X %d %d %d", f.h.magic, f.h.version, f.h.type, f.h.payload_len);
-
-  
-
-  free(binary_in->data);
-  free(binary_in);
 }
