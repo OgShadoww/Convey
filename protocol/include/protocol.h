@@ -8,15 +8,19 @@ typedef struct {
 } Buff;
 
 typedef enum {
-  MSG_AUTH_REGISTER,
-  MSG_AUTH_LOGIN,
-  MSG_GET,
-  MSG_PUT_INIT,
-  MSG_PUT_CHUNK,
-  MSG_PUT_FINISH,
-  MSG_ERROR,
-  MSG_OK
+  MSG_AUTH_REGISTER = 1,
+  MSG_AUTH_LOGIN = 2,
+  MSG_GET = 3,
+  MSG_PUT_INIT = 4,
+  MSG_PUT_CHUNK = 5,
+  MSG_PUT_FINISH = 6,
+  MSG_ERROR = 80,
+  MSG_OK = 88
 } ConveyMsgType;
+
+typedef enum {
+  ERR_WRONG_TYPE
+} ErrorTypes;
 
 #define CONVEY_MAGIC 0x43565931u
 #define CONVEY_HEADER_LEN 10
@@ -46,6 +50,11 @@ typedef struct {
   char password[128];
   char confirmed_password[128];
 } MsgRegister;
+
+typedef struct {
+  uint8_t error_type;
+  char *error_message;
+} MsgError;
 
 typedef struct {
   char file_name[128];
@@ -97,3 +106,10 @@ int encode_payload_login(Buff *b, MsgLogin *p);
 
 // OK 
 int send_ok(int fd);
+
+// Error 
+// The 16 bits after first byte is length of next message
+int decode_payload_error(Buff *b, MsgError *e);
+int encode_payload_error(Buff *b, MsgError *e);
+char* convey_error_str(ErrorTypes type);
+int send_error(int fd, ErrorTypes type);

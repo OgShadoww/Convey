@@ -213,9 +213,79 @@ int send_ok(int fd) {
 
   write_frame(fd, &f);
 
-  return 1;
+  return 0;
 }
 
+// Error
+
+char *ConveyErrorMessage[] = {
+  [ERR_WRONG_TYPE] = "Hello world",
+};
+
+char* convey_error_str(ErrorTypes type) {
+  if(ConveyErrorMessage[type] != NULL) {
+    return ConveyErrorMessage[type];
+  }
+  
+  return NULL;
+}
+
+int decode_payload_error(Buff *b, MsgError *e) {
+  // Reading the type of error
+  uint8_t type = 0;
+  if(buff_read_u8(b, &type) == -1) return -1;
+  e->error_type = type;
+
+  // Reading the message
+  uint16_t len = 0;
+  if(buff_read_u16(b, &len) == -1) return -1;
+  
+  for(int i = 0; i < len; i++) {
+    uint8_t ch = 0;
+
+    if(buff_read_u8(b, &ch) == -1) return -1;
+    e->error_message[i] = (char)ch;
+  }
+
+  return 0;
+}
+
+int encode_payload_error(Buff *b, MsgError *e) {
+  // Writing type
+  if(buff_write_u8(b, e->error_type) == -1) return -1;
+
+  // Writing message
+  uint16_t len = strlen(e->error_message);
+  if(buff_write_u16(b, len) == -1) return -1;
+  for(int i = 0; i < len; i++) {
+    if(buff_write_u8(b, e->error_message[i]) == -1) return -1;
+  }
+
+  return 0;
+}
+
+int send_error(int fd, ErrorTypes type) {
+  uint32_t payload_len = sizeof(uint8_t) + sizeof(uint16_t) + strlen(convey_error_str(type));
+
+  MsgError e = { 
+    .error_type = type,
+    .error_message = convey_error_str(type)
+  };
+  Buff p; 
+  if(encode_payload_error(&p, &e) == -1) return -1;
+
+  ConveyFrame f = {
+    .header = {
+      .magic = CONVEY_MAGIC,
+      .version = CONVEY_VERSION,
+      .type = MSG_ERROR,
+      .payload_len = payload_len
+    },
+    .payload = p
+  };
+
+  return 0;
+}
 
 // ===============================
 // FRAME OPERATIONS READ / WRITE
