@@ -1,189 +1,63 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include <string.h>
-#include <poll.h>
-#include <fcntl.h>
-#include "uttils.h"
+#include "../protocol/include/protocol.h"
 
-#define MAX_CLIENTS 64
 #define PORT 8080
 
-typedef struct {
-  int key;
-  char *value;
-} MapEntry;
-
-typedef struct {
-  MapEntry *entries;
-  int size;
-  int capacity;
-} Map;
-
-static Map *init_map() {
-  Map *m = malloc(sizeof(Map));
-  // Make error check
-  m->size = 0;
-  m->capacity = 64;
-  m->entries = malloc(sizeof(MapEntry)*m->capacity);
-  for(int i = 0; i < m->capacity; i++) {
-    m->entries[i].key = -1;
-    m->entries[i].value = NULL;  
-  }
-
-  return m;
-}
-
-static int map_insert(Map *m, int key, char *value) {
-  if(m->size >= m->capacity) {
-    m->capacity *= 2;
-    m->entries = realloc(m->entries, sizeof(MapEntry)*m->capacity);
-    // Make error check    
-  }
+int run_server() {
+  int fd = socket(AF_INET, SOCK_STREAM, 0);
   
-  m->entries[m->size].key = key;
-  m->entries[m->size].value = value;
-  m->size++;
+  struct sockaddr_in addr;
+  memset(&addr, 0, sizeof(addr));
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(8080);
 
-  return 1;
+  if(inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr) <= 0) return -1;
+
+  if(bind(fd, &addr, sizeof(addr)) < 0) return -1;
+
+  if(listen(fd, 128) < 0) return -1;
+
+  printf("Listening on 127.0.0.1:8080...\n");
+
+  return fd;
 }
 
-static char *map_get(Map *m, int key) {
-  for(int i = 0; i < m->size; i++) {
-    if(key == m->entries[i].key) {
-      return m->entries[i].value;
+void handle_request(ConveyFrame *f) {
+
+  switch (f->header.type) {
+    case MSG_AUTH_LOGIN: {
+      MsgLogin l = {0};
+      decode_payload_login(&f->payload, &l);
+      printf("%s %s\n", l.password, l.username);
+      break;
     }
   }
-
-  return NULL;
 }
 
-static int map_erase(Map *m, int key) {
-  for(int i = 0; i < m->size; i++) {
-    if(key == m->entries[i].key) {
-      free(m->entries[i].value);
-      m->entries[i].key = -1;
-      m->entries[i].value = NULL;
-      return 1;
-    }
+void handle_connection(int fd) {
+  for(;;) {
+    ConveyFrame *f = malloc(sizeof(ConveyFrame));
+    read_frame(fd, f);
+    handle_request(f);
+    free_frame(f);
+    free(f);
   }
-
-  return -1;
+    
 }
 
 int main() {
-  // Users map
-  Map *Users = init_map();
+  int fd = run_server();
 
-  int socket_fd = socket(AF_INET, SOCK_STREAM, 0); 
-  if(socket_fd < 0) {
-    die("Socket error");
-  }
-
-  struct sockaddr_in fd_adr;
-  fd_adr.sin_family = AF_INET;
-  fd_adr.sin_port = htons(8080);
-  fd_adr.sin_addr.s_addr = INADDR_ANY;
-
-  if(bind(socket_fd, (struct sockaddr*)&fd_adr, sizeof(fd_adr)) < 0) die("Bind error");
-  if(listen(socket_fd, 10) < 0) die("Listen error");
-  
-  struct pollfd pfds[MAX_CLIENTS + 2];
-  int nfds = MAX_CLIENTS + 2;
-
-  // Listening socket init
-  pfds[0].fd = socket_fd;
-  pfds[0].events = POLLIN;
-
-  // Admin stdin
-  pfds[1].fd = STDIN_FILENO;
-  pfds[1].events = POLLIN;
-
-  // Init clinets sockets
-  for(int i = 2; i < MAX_CLIENTS + 2; i++) {
-    pfds[i].fd = -1;
-    pfds[i].events = POLLIN;
-  }
-
-  while(1) {
-    write(STDOUT_FILENO, "> \n", 3);
-    int ret = poll(pfds, nfds, -1);
-    if(ret < 0) die("Poll error");
-    
-    // Admin panel
-    if(pfds[1].revents & POLLIN) {
-      printf("Please write the command for the admin: ");
-      char buffer[256];
-      size_t n = read(STDIN_FILENO, buffer, 256);
-
-      if(n > 0) {
-        write(STDOUT_FILENO, buffer, n);
-      }
-
-      continue;
+  for(;;) { 
+    int cfd = accept(fd, NULL, NULL);
+    if(cfd == -1) {
+      printf("Error\n");
+      break;
     }
-    // Listening socket check
-    else if(pfds[0].revents & POLLIN) {
-      int client_fd = accept(socket_fd, NULL, NULL);
-      if(client_fd < 0) {
-        perror("Client connection error");
-        continue;
-      }
-
-      for(int i = 2; i < MAX_CLIENTS + 2; i++) {
-        if(pfds[i].fd == -1) {
-          pfds[i].fd = client_fd;
-
-          char name[128];
-          int n = read(client_fd, name, sizeof(name));
-          name[n] = '\0';
- 
-          write(STDOUT_FILENO, "Connection found", 18);
-          write(STDOUT_FILENO, name, n);
-          write(STDOUT_FILENO, "\n", 1);
-
-          map_insert(Users, client_fd, strdup(name));
-          break;
-        }
-      }
-    }
-    for(int i = 2; i < nfds; i++) {
-      if(pfds[i].fd == -1) continue;
-
-      if(pfds[i].revents & POLLIN) {
-        char buffer[256];
-        ssize_t n = read(pfds[i].fd, buffer, sizeof(buffer));
-
-        if (n == 0) {
-          // Disconnect
-          close(pfds[i].fd);
-          map_erase(Users, pfds[i].fd);
-          pfds[i].fd = -1;
-          pfds[i].revents = 0;
-          continue;
-        }
-        if (n < 0) {
-          // Error
-          close(pfds[i].fd);
-          map_erase(Users, pfds[i].fd);
-          pfds[i].fd = -1;
-          pfds[i].revents = 0;
-          continue;
-        }
-
-        char *name = map_get(Users, pfds[i].fd);
-        name[strcspn(name, "\r\n")] = '\0';
-        int file_fd = open(name, O_WRONLY | O_CREAT | O_APPEND, 0644);
-        if (file_fd >= 0) {
-          write(file_fd, buffer, (size_t)n);
-          close(file_fd);
-        }      
-      }
-    }
+    handle_connection(cfd);
   }
-
-
-  return 0;
 }
