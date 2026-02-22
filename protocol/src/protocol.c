@@ -346,7 +346,3 @@ void free_frame(ConveyFrame *f) {
   f->payload.len = 0;
   f->payload.pos = 0;
 }
-
-int main() {
-
-}
