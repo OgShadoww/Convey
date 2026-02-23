@@ -32,7 +32,7 @@ void handle_request(ConveyFrame *f) {
     case MSG_AUTH_LOGIN: {
       MsgLogin l = {0};
       decode_payload_login(&f->payload, &l);
-      printf("%s %s\n", l.password, l.username);
+
       break;
     }
   }
