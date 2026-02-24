@@ -1,6 +1,7 @@
 #ifndef PROTOCOL_TYPES_H
 #define PROTOCOL_TYPES_H
 
+#include <cstdint>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -22,7 +23,9 @@ typedef enum {
 } ConveyMsgType;
 
 typedef enum {
-  ERR_WRONG_TYPE
+  ERR_WRONG_TYPE,
+  ERR_PERMISSION_DENIED,
+  ERR_CONNECTION_FAILLED
 } ErrorTypes;
 
 #define CONVEY_MAGIC 0x43565931u
@@ -35,6 +38,7 @@ typedef struct {
   uint8_t version;
   uint8_t type;
   uint32_t payload_len;
+  uint8_t token[];
 } ConveyHeader;
 
 typedef struct {
