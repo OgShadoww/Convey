@@ -53,7 +53,7 @@ void handle_connection(int fd) {
   }
 }
 
-void remove_client() {
+void remove_client(int fd) {
 
 }
 
