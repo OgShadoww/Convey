@@ -26,3 +26,5 @@ General-purpose protocols (HTTP/S3/etc.) are great, but Convey is built to:
   - resumable transfers
   - authentication/session handling
   - metadata indexing
+  - databases
+  - tls 
