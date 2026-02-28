@@ -1,4 +1,7 @@
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include <poll.h>
@@ -6,6 +9,20 @@
 
 #define PORT 8080
 #define MAX_CLIENTS 2048
+
+typedef struct {
+  int fd;
+  uint8_t *in;
+  size_t in_len;
+  size_t in_capacity;
+  int have_header;
+  ConveyHeader *header;
+  size_t total_memory;
+  uint8_t *out;
+  size_t out_capacity;
+  size_t out_len;
+  size_t out_pos;
+} Client;
 
 int run_server() {
   int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -26,6 +43,25 @@ int run_server() {
   return fd;
 }
 
+Client create_client(int fd) {
+  uint8_t *in = malloc(4096);
+  size_t in_capacity = 4096;
+  size_t in_len = 0;
+
+  Client client = {
+    .fd = fd,
+    .in = in,
+    .in_capacity = in_capacity,
+    .in_len = in_len,
+    .have_header = -1,
+    .header = NULL,
+    .out = NULL,
+    .out_pos = 0,
+    .out_capacity = 0,
+    .out_len = 0,
+  };
+}
+
 void handle_request(ConveyFrame *f) {
 
   switch (f->header.type) {
@@ -38,19 +74,8 @@ void handle_request(ConveyFrame *f) {
   }
 }
 
-void handle_connection(int fd) {
-  ConveyFrame *f = malloc(sizeof(ConveyFrame));
-  if(read_frame(fd, f) != -1) {
-    handle_request(f);
-    send_ok(fd);
-    free_frame(f);
-    free(f);
-  }
-  else {
-    send_error(fd, ERR_CONNECTION_FAILLED);
-    free_frame(f);
-    free(f);
-  }
+void handle_connection(Client client) {
+  
 }
 
 void remove_client(int fd) {
