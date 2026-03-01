@@ -12,16 +12,11 @@
 
 typedef struct {
   int fd;
-  uint8_t *in;
-  size_t in_len;
-  size_t in_capacity;
+  Buff *in;
   int have_header;
   ConveyHeader *header;
   size_t total_memory;
-  uint8_t *out;
-  size_t out_capacity;
-  size_t out_len;
-  size_t out_pos;
+  Buff *out;
 } Client;
 
 int run_server() {
@@ -30,7 +25,7 @@ int run_server() {
   struct sockaddr_in addr;
   memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
-  addr.sin_port = htons(8080);
+  addr.sin_port = htons(PORT);
 
   if(inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr) <= 0) return -1;
 
@@ -43,47 +38,89 @@ int run_server() {
   return fd;
 }
 
-Client create_client(int fd) {
-  uint8_t *in = malloc(4096);
+Client *create_client(int fd) {
   size_t in_capacity = 4096;
   size_t in_len = 0;
+  Buff *in = malloc(sizeof(Buff));
+  in->len = 0;
+  in->pos = 0;
+  in->data = NULL;
 
-  Client client = {
-    .fd = fd,
-    .in = in,
-    .in_capacity = in_capacity,
-    .in_len = in_len,
-    .have_header = -1,
-    .header = NULL,
-    .out = NULL,
-    .out_pos = 0,
-    .out_capacity = 0,
-    .out_len = 0,
-  };
+  Buff *out = malloc(sizeof(Buff));
+  in->len = 0;
+  in->pos = 0;
+  in->data = NULL;
+
+  ConveyHeader *header = malloc(sizeof(ConveyHeader));
+  header->payload_len = 0;
+  header->magic = CONVEY_HEADER_LEN;
+  header->type = 0;
+  header->version = CONVEY_VERSION;
+
+  Client *client = malloc(sizeof(Client));
+  client->fd = fd;
+  client->in = in;
+  client->have_header = -1;
+  client->header = header;
+  client->out = out;
+
+  return client;
 }
 
-void handle_request(ConveyFrame *f) {
+void remove_client(Client *client) { 
+  free(client->in->data);
+  free(client->in);
+  free(client->out->data);
+  free(client->out);
+  free(client->header);
+  free(client);
+}
 
-  switch (f->header.type) {
+void handle_request(Client *client) {
+
+  switch (client->header->type) {
     case MSG_AUTH_LOGIN: {
       MsgLogin l = {0};
-      decode_payload_login(&f->payload, &l);
+      decode_payload_login(client->in, &l);
 
       break;
     }
   }
 }
 
-void handle_connection(Client client) {
-  
-}
+int handle_connection(Client *client) {
+  if(!client->have_header) {
+    size_t n = read_some(client->fd, client->in, CONVEY_HEADER_LEN - client->in->len);
+    if(n < 0) return -1;
+    client->in->pos += n;
+    if(client->in->pos == CONVEY_HEADER_LEN) {
+      client->have_header = 1;
+      decode_header(client->in, client->header);
+      free(client->in->data);
+      free(client->in);
 
-void remove_client(int fd) {
+      // Clean in buffer for payload
+      client->in = malloc(sizeof(Buff));
+      client->in->data = malloc(client->header->payload_len);
+      client->in->pos = 0;
+      client->in->len = 0;
+    }
+    if(client->have_header) {
+      size_t n = read_some(client->fd, client->in->data, client->header->payload_len - client->in->len);
 
+      if(n < 0) return -1;
+      client->in->len += n;
+      if(client->in->len == client->header->payload_len) {
+        handle_request(client);
+      }
+    }
+  }
 }
 
 int main() {
   int fd = run_server();
+
+  // Poll concurrency
   nfds_t nfd = 2;
   struct pollfd fds[MAX_CLIENTS];
   fds[0].fd = STDIN_FILENO;
@@ -110,6 +147,7 @@ int main() {
           fds[nfd].fd = cfd;
           fds[nfd].events = POLLIN;
           nfd++;
+          Client *newClient = create_client(cfd);
         }
       }
       else if(fds[0].revents & POLLIN) {
