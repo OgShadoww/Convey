@@ -29,7 +29,7 @@ typedef enum {
 } ErrorTypes;
 
 #define CONVEY_MAGIC 0x43565931u
-#define CONVEY_HEADER_LEN 10
+#define CONVEY_HEADER_LEN 18
 #define CONVEY_MAX_PAYLOAD (8u * 1024u * 1024u)
 #define CONVEY_VERSION 1
 
@@ -38,7 +38,7 @@ typedef struct {
   uint8_t version;
   uint8_t type;
   uint32_t payload_len;
-  uint8_t token[];
+  uint64_t token;
 } ConveyHeader;
 
 typedef struct {

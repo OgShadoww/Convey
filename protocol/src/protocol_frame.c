@@ -9,6 +9,7 @@ int encode_header(Buff *b, ConveyHeader *h) {
   if(buff_write_u8(b, h->version) == -1) return -1;
   if(buff_write_u8(b, h->type) == -1) return -1;
   if(buff_write_u32(b, h->payload_len) == -1) return -1;
+  if(buff_write_u64(b, h->token) == -1) return -1;
 
   return 0;
 }
@@ -18,6 +19,7 @@ int decode_header(Buff *b, ConveyHeader *h) {
   if(buff_read_u8(b, &h->version) == -1) return -1;
   if(buff_read_u8(b, &h->type) == -1) return -1;
   if(buff_read_u32(b, &h->payload_len) == -1) return -1;
+  if(buff_read_u64(b, &h->token) == -1) return -1;
 
   return 0;
 }

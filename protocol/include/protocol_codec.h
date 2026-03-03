@@ -7,8 +7,10 @@
 int buff_write_u8(Buff *b, uint8_t v);
 int buff_write_u16(Buff *b, uint16_t v);
 int buff_write_u32(Buff *b, uint32_t v);
+int buff_write_u64(Buff *b, uint64_t v);
 int buff_read_u8(Buff *b, uint8_t *out);
 int buff_read_u16(Buff *b, uint16_t *out);
 int buff_read_u32(Buff *b, uint32_t *out);
+int buff_read_u64(Buff *b, uint64_t *out);
 
 #endif
