@@ -1,13 +1,16 @@
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
-    username TEXT UNIQUE,
-    password_hash TEXT
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at INTEGER NOT NULL
 );
 
-CREATE TABLE files (
+CREATE TABLE IF NOT EXISTS files (
     id INTEGER PRIMARY KEY,
-    user_id INTEGER,
-    filename TEXT,
-    size INTEGER,
-    uploaded_at INTEGER
+    owner_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    stored_path TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    uploaded_at INTEGER NOT NULL,
+    FOREIGN KEY(owner_id) REFERENCES users(id)
 );
