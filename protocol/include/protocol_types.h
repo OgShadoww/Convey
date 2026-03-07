@@ -1,7 +1,6 @@
 #ifndef PROTOCOL_TYPES_H
 #define PROTOCOL_TYPES_H
 
-#include <cstdint>
 #include <stddef.h>
 #include <stdint.h>
 
