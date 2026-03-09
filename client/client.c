@@ -15,23 +15,6 @@ static int read_line(char *buf, size_t size) {
   return 0;
 }
 
-static int write_all_blocking(int fd, const uint8_t *p, size_t n) {
-  size_t off = 0;
-  while (off < n) {
-    ssize_t w = write_some(fd, p + off, n - off);
-    if (w < 0) {
-      perror("write_some");
-      return -1;
-    }
-    if (w == 0) {
-      fprintf(stderr, "write_some returned 0 (peer closed?)\n");
-      return -1;
-    }
-    off += (size_t)w;
-  }
-  return 0;
-}
-
 int main(void) {
   int fd = socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) { perror("socket"); return 1; }
@@ -116,11 +99,11 @@ int main(void) {
       }
 
       // Send header then payload.
-      if (write_all_blocking(fd, header_bytes, CONVEY_HEADER_LEN) < 0) {
+      if (write_all(fd, header_bytes, CONVEY_HEADER_LEN) < 0) {
         free(payload);
         break;
       }
-      if (write_all_blocking(fd, payload, pb.pos) < 0) {
+      if (write_all(fd, payload, pb.pos) < 0) {
         free(payload);
         break;
       }
