@@ -39,28 +39,26 @@ int run_server() {
 }
 
 Client *create_client(int fd) {
-  size_t in_capacity = 4096;
-  size_t in_len = 0;
   Buff *in = malloc(sizeof(Buff));
   in->len = 0;
   in->pos = 0;
-  in->data = NULL;
+  in->data = malloc(CONVEY_HEADER_LEN);
 
   Buff *out = malloc(sizeof(Buff));
-  in->len = 0;
-  in->pos = 0;
-  in->data = NULL;
+  out->len = 0;
+  out->pos = 0;
+  out->data = NULL;
 
   ConveyHeader *header = malloc(sizeof(ConveyHeader));
   header->payload_len = 0;
-  header->magic = CONVEY_HEADER_LEN;
+  header->magic = CONVEY_MAGIC;
   header->type = 0;
   header->version = CONVEY_VERSION;
 
   Client *client = malloc(sizeof(Client));
   client->fd = fd;
   client->in = in;
-  client->have_header = -1;
+  client->have_header = 0;
   client->header = header;
   client->out = out;
 
@@ -80,20 +78,28 @@ void handle_request(Client *client) {
 
   switch (client->header->type) {
     case MSG_AUTH_LOGIN: {
-      MsgLogin l = {0};
-      decode_payload_login(client->in, &l);
+      printf("Client handle\n");
+      MsgLogin *l = malloc(sizeof(MsgLogin));
+      decode_payload_login(client->in, l);
+      printf("%s %s\n", l->username, l->password);
+  
+      free(l);
 
+      client->have_header = 0;
       break;
+    }
+    default: {
+      printf("Connected default\n");
     }
   }
 }
 
 int handle_connection(Client *client) {
   if(!client->have_header) {
-    size_t n = read_some(client->fd, client->in, CONVEY_HEADER_LEN - client->in->len);
+    int n = read_some(client->fd, client->in->data, CONVEY_HEADER_LEN - client->in->len);
     if(n < 0) return -1;
-    client->in->pos += n;
-    if(client->in->pos == CONVEY_HEADER_LEN) {
+    client->in->len += n;
+    if(client->in->len == CONVEY_HEADER_LEN) {
       client->have_header = 1;
       decode_header(client->in, client->header);
       free(client->in->data);
@@ -101,20 +107,36 @@ int handle_connection(Client *client) {
 
       // Clean in buffer for payload
       client->in = malloc(sizeof(Buff));
+      if(!client->in) {
+        perror("Malloc failled");
+        return -1;
+      }
       client->in->data = malloc(client->header->payload_len);
+      if(!client->in->data) {
+        perror("Malloc failled");
+        return -1;
+      }
       client->in->pos = 0;
       client->in->len = 0;
     }
-    if(client->have_header) {
-      size_t n = read_some(client->fd, client->in->data, client->header->payload_len - client->in->len);
-
-      if(n < 0) return -1;
-      client->in->len += n;
-      if(client->in->len == client->header->payload_len) {
-        handle_request(client);
-      }
-    }
+    return 0;
   }
+  if(client->have_header) {
+    int n = read_some(client->fd, client->in->data, client->header->payload_len - client->in->len);
+
+    if(n < 0) return -1;
+    client->in->len += n;
+    if(client->in->len == client->header->payload_len) {
+      handle_request(client);
+    }
+    return 0;
+  }
+
+  return 0;
+}
+
+void main_loop() {
+
 }
 
 int main() {
@@ -128,6 +150,9 @@ int main() {
 
   fds[1].fd = fd;
   fds[1].events = POLLIN;
+
+  // Array for client
+  Client *clients[MAX_CLIENTS];
 
   for(;;) { 
     int ret = poll(fds, nfd, -1);
@@ -146,8 +171,10 @@ int main() {
         if(nfd < MAX_CLIENTS) {
           fds[nfd].fd = cfd;
           fds[nfd].events = POLLIN;
-          nfd++;
           Client *newClient = create_client(cfd);
+          clients[nfd] = newClient;
+          nfd++;
+          printf("Connection success\n");
         }
       }
       else if(fds[0].revents & POLLIN) {
@@ -156,11 +183,19 @@ int main() {
 
       for(int i = 2; i < nfd; i++) {
         if (fds[i].revents & (POLLHUP | POLLERR | POLLNVAL)) {
+          close(fds[i].fd);
+          printf("Remove client %d\n", fds[i].fd);
+          remove_client(clients[i]);
+          clients[i] = NULL;
+
           fds[i].fd = -1;
-          nfd--; 
+          nfd--;
+          break;
         }
         else if(fds[i].revents & POLLIN) {
-          handle_connection(fds[i].fd); 
+          printf("Handling fd=%d\n", fds[i].fd);
+          handle_connection(clients[i]);
+          break;
         }
       }
     }
