@@ -39,23 +39,23 @@ int run_server() {
 }
 
 Client *create_client(int fd) {
-  Buff *in = malloc(sizeof(Buff));
+  Buff *in = malloc(sizeof(*in));
   in->len = 0;
   in->pos = 0;
   in->data = malloc(CONVEY_HEADER_LEN);
 
-  Buff *out = malloc(sizeof(Buff));
+  Buff *out = malloc(sizeof(*out));
   out->len = 0;
   out->pos = 0;
   out->data = NULL;
 
-  ConveyHeader *header = malloc(sizeof(ConveyHeader));
+  ConveyHeader *header = malloc(sizeof(*header));
   header->payload_len = 0;
   header->magic = CONVEY_MAGIC;
   header->type = 0;
   header->version = CONVEY_VERSION;
 
-  Client *client = malloc(sizeof(Client));
+  Client *client = malloc(sizeof(*client));
   client->fd = fd;
   client->in = in;
   client->have_header = 0;
@@ -79,7 +79,7 @@ void handle_request(Client *client) {
   switch (client->header->type) {
     case MSG_AUTH_LOGIN: {
       printf("Client handle\n");
-      MsgLogin *l = malloc(sizeof(MsgLogin));
+      MsgLogin *l = malloc(sizeof(*l));
       decode_payload_login(client->in, l);
       printf("%s %s\n", l->username, l->password);
   
@@ -106,7 +106,7 @@ int handle_connection(Client *client) {
       free(client->in);
 
       // Clean in buffer for payload
-      client->in = malloc(sizeof(Buff));
+      client->in = malloc(sizeof(*client->in));
       if(!client->in) {
         perror("Malloc failled");
         return -1;
