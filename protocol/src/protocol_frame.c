@@ -40,7 +40,7 @@ int read_frame(int fd, ConveyFrame *f) {
 
   if(f->header.payload_len > 0) {
     f->payload.data = malloc(f->header.payload_len);
-    if(f->payload.data == NULL) return -1;
+    if(!f->payload.data) return -1;
   }
   else {
     f->payload.data = NULL;
