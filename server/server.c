@@ -40,42 +40,27 @@ int run_server() {
 
 Client *create_client(int fd) {
   Buff *in = malloc(sizeof(*in));
-  if(!in) {
-    perror("Malloc failled");
-    return NULL;
-  }
+  if(!in) goto fail;
   in->len = 0;
   in->pos = 0;
   in->data = malloc(CONVEY_HEADER_LEN);
-  if(!in->data) {
-    perror("Malloc failled");
-    return NULL;
-  }
+  if(!in->data) goto fail;
 
   Buff *out = malloc(sizeof(*out));
-  if(!out) {
-    perror("Malloc failled");
-    return NULL;
-  }
+  if(!out) goto fail;
   out->len = 0;
   out->pos = 0;
   out->data = NULL;
 
   ConveyHeader *header = malloc(sizeof(*header));
-  if(!header) {
-    perror("Malloc failled");
-    return NULL;
-  }
+  if(!header) goto fail;
   header->payload_len = 0;
   header->magic = CONVEY_MAGIC;
   header->type = 0;
   header->version = CONVEY_VERSION;
 
   Client *client = malloc(sizeof(*client));
-  if(!client) {
-    perror("Malloc failled");
-    return NULL;
-  }
+  if(!client) goto fail;
 
   client->fd = fd;
   client->in = in;
@@ -84,13 +69,31 @@ Client *create_client(int fd) {
   client->out = out;
 
   return client;
+
+fail:
+  if(in) {
+    free(in->data);
+    free(in);
+  }
+  if(out) {
+    free(out->data);
+    free(out);
+  }
+  free(header);
+  free(client);
+  return NULL;
 }
 
 void remove_client(Client *client) { 
-  free(client->in->data);
-  free(client->in);
-  free(client->out->data);
-  free(client->out);
+  if(!client) return;
+  if(client->in) {
+    free(client->in->data);
+    free(client->in);
+  }
+  if(client->out) {
+    free(client->out->data);
+    free(client->out);
+  }
   free(client->header);
   free(client);
 }
@@ -110,6 +113,18 @@ void handle_request(Client *client) {
   
       free(l);
 
+      // Clear buffers
+      free(client->in->data);
+      free(client->in);
+
+      client->in = malloc(sizeof(*client->in));
+      if(!client->in) return;
+
+      client->in->data = malloc(CONVEY_HEADER_LEN);
+      if(!client->in->data) return;
+
+      client->in->len = 0;
+      client->in->pos = 0;
       client->have_header = 0;
       break;
     }
@@ -121,8 +136,8 @@ void handle_request(Client *client) {
 
 int handle_connection(Client *client) {
   if(!client->have_header) {
-    int n = read_some(client->fd, client->in->data, CONVEY_HEADER_LEN - client->in->len);
-    if(n < 0) return -1;
+    int n = read_some(client->fd, client->in->data + client->in->len, CONVEY_HEADER_LEN - client->in->len);
+    if(n <= 0) return -1;
     client->in->len += n;
     if(client->in->len == CONVEY_HEADER_LEN) {
       client->have_header = 1;
@@ -132,13 +147,12 @@ int handle_connection(Client *client) {
 
       // Clean in buffer for payload
       client->in = malloc(sizeof(*client->in));
-      if(!client->in) {
-        perror("Malloc failled");
-        return -1;
-      }
+      if(!client->in) return -1;
+
       client->in->data = malloc(client->header->payload_len);
       if(!client->in->data) {
-        perror("Malloc failled");
+        free(client->in);
+        client->in = NULL;
         return -1;
       }
       client->in->pos = 0;
@@ -147,7 +161,7 @@ int handle_connection(Client *client) {
     return 0;
   }
   if(client->have_header) {
-    int n = read_some(client->fd, client->in->data, client->header->payload_len - client->in->len);
+    int n = read_some(client->fd, client->in->data + client->in->len, client->header->payload_len - client->in->len);
 
     if(n < 0) return -1;
     client->in->len += n;
@@ -202,25 +216,36 @@ int main() {
           printf("Connection success\n");
         }
       }
-      else if(fds[0].revents & POLLIN) {
+      if(fds[0].revents & POLLIN) {
         continue;
       }
 
-      for(int i = 2; i < nfd; i++) {
+      for(nfds_t i = 2; i < nfd; i++) {
         if (fds[i].revents & (POLLHUP | POLLERR | POLLNVAL)) {
           close(fds[i].fd);
           printf("Remove client %d\n", fds[i].fd);
           remove_client(clients[i]);
           clients[i] = NULL;
+          
+          if (i != nfd - 1) {
+              fds[i] = fds[nfd - 1];
+              clients[i] = clients[nfd - 1];
+          }
 
-          fds[i].fd = -1;
+          fds[nfd - 1].fd = -1;
+          clients[nfd - 1] = NULL;
           nfd--;
-          break;
+          i--;
+          continue;
         }
-        else if(fds[i].revents & POLLIN) {
+        if(fds[i].revents & POLLIN) {
           printf("Handling fd=%d\n", fds[i].fd);
-          handle_connection(clients[i]);
-          break;
+          if(handle_connection(clients[i]) < 0) {
+            close(fds[i].fd);
+            remove_client(clients[i]);
+
+            // ...
+          }
         }
       }
     }
