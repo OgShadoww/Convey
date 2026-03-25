@@ -103,6 +103,9 @@ int send_error(int fd, ErrorTypes type) {
     .payload = p
   };
 
+  // Send frame
+  write_frame(fd, &f);
+
   return 0;
 }
 
