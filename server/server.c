@@ -210,10 +210,14 @@ int main() {
         if(nfd < MAX_CLIENTS) {
           fds[nfd].fd = cfd;
           fds[nfd].events = POLLIN;
+          fds[nfd].revents = 0;
           Client *newClient = create_client(cfd);
           clients[nfd] = newClient;
           nfd++;
           printf("Connection success\n");
+        }
+        else {
+          close(cfd);
         }
       }
       if(fds[0].revents & POLLIN) {
@@ -221,7 +225,7 @@ int main() {
       }
 
       for(nfds_t i = 2; i < nfd; i++) {
-        if (fds[i].revents & (POLLHUP | POLLERR | POLLNVAL)) {
+        if(fds[i].revents & (POLLHUP | POLLERR | POLLNVAL)) {
           close(fds[i].fd);
           printf("Remove client %d\n", fds[i].fd);
           remove_client(clients[i]);
@@ -235,6 +239,7 @@ int main() {
           fds[nfd - 1].fd = -1;
           clients[nfd - 1] = NULL;
           nfd--;
+
           i--;
           continue;
         }
