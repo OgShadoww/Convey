@@ -21,6 +21,7 @@ typedef struct {
 
 int run_server() {
   int fd = socket(AF_INET, SOCK_STREAM, 0);
+  if(fd < 0) return -1;
   
   struct sockaddr_in addr;
   memset(&addr, 0, sizeof(addr));
@@ -180,10 +181,11 @@ void main_loop() {
 
 int main() {
   int fd = run_server();
+  if(fd < 0) return -1;
 
   // Poll concurrency
   nfds_t nfd = 2;
-  struct pollfd fds[MAX_CLIENTS];
+  struct pollfd fds[MAX_CLIENTS] = {0};
   fds[0].fd = STDIN_FILENO;
   fds[0].events = POLLIN;
 
@@ -191,7 +193,7 @@ int main() {
   fds[1].events = POLLIN;
 
   // Array for client
-  Client *clients[MAX_CLIENTS];
+  Client *clients[MAX_CLIENTS] = {0};
 
   for(;;) { 
     int ret = poll(fds, nfd, -1);
@@ -220,9 +222,6 @@ int main() {
           close(cfd);
         }
       }
-      if(fds[0].revents & POLLIN) {
-        continue;
-      }
 
       for(nfds_t i = 2; i < nfd; i++) {
         if(fds[i].revents & (POLLHUP | POLLERR | POLLNVAL)) {
@@ -237,6 +236,8 @@ int main() {
           }
 
           fds[nfd - 1].fd = -1;
+          fds[nfd - 1].events = 0;
+          fds[nfd - 1].revents = 0;
           clients[nfd - 1] = NULL;
           nfd--;
 
@@ -248,8 +249,9 @@ int main() {
           if(handle_connection(clients[i]) < 0) {
             close(fds[i].fd);
             remove_client(clients[i]);
-
-            // ...
+            fds[i].fd = -1;
+            fds[i].events = 0;
+            fds[i].revents = 0;
           }
         }
       }
