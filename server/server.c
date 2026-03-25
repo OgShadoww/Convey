@@ -5,6 +5,8 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <poll.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 #include "../protocol/include/protocol.h"
 
 #define PORT 8080
@@ -12,12 +14,40 @@
 
 typedef struct {
   int fd;
+  SSL *ssl;
+} Conn;
+
+typedef struct {
+  int fd;
+  SSL *ssl;
   Buff *in;
   int have_header;
   ConveyHeader *header;
   size_t total_memory;
   Buff *out;
 } Client;
+
+SSL_CTX *create_server_ctx() {
+  SSL_CTX *ctx = SSL_CTX_new(TLS_server_method());
+  if (!ctx) {
+    ERR_print_errors_fp(stderr);
+    return NULL;
+  }
+
+  if(SSL_CTX_use_certificate_file(ctx, "cert.perm", SSL_FILETYPE_PEM) <= 0) {
+    ERR_print_errors_fp(stderr);
+    SSL_CTX_free(ctx);
+    return NULL;
+  }
+  
+  if(SSL_CTX_use_PrivateKey_file(ctx, "key.perm", SSL_FILETYPE_PEM) <= 0) {
+    ERR_print_errors_fp(stderr);
+    SSL_CTX_free(ctx);
+    return NULL;
+  }
+
+  return ctx;
+}
 
 int run_server() {
   int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -39,7 +69,7 @@ int run_server() {
   return fd;
 }
 
-Client *create_client(int fd) {
+Client *create_client(int fd, SSL *ssl) {
   Buff *in = malloc(sizeof(*in));
   if(!in) goto fail;
   in->len = 0;
@@ -64,6 +94,7 @@ Client *create_client(int fd) {
   if(!client) goto fail;
 
   client->fd = fd;
+  client->ssl = ssl;
   client->in = in;
   client->have_header = 0;
   client->header = header;
@@ -82,11 +113,17 @@ fail:
   }
   free(header);
   free(client);
+  SSL_shutdown(client->ssl);
+  SSL_free(client->ssl);
   return NULL;
 }
 
 void remove_client(Client *client) { 
   if(!client) return;
+  if(client->ssl) {
+    SSL_shutdown(client->ssl);
+    SSL_free(client->ssl);
+  }
   if(client->in) {
     free(client->in->data);
     free(client->in);
@@ -137,7 +174,7 @@ void handle_request(Client *client) {
 
 int handle_connection(Client *client) {
   if(!client->have_header) {
-    int n = read_some(client->fd, client->in->data + client->in->len, CONVEY_HEADER_LEN - client->in->len);
+    int n = read_some(client->ssl, client->fd, client->in->data + client->in->len, CONVEY_HEADER_LEN - client->in->len);
     if(n <= 0) return -1;
     client->in->len += n;
     if(client->in->len == CONVEY_HEADER_LEN) {
@@ -162,7 +199,7 @@ int handle_connection(Client *client) {
     return 0;
   }
   if(client->have_header) {
-    int n = read_some(client->fd, client->in->data + client->in->len, client->header->payload_len - client->in->len);
+    int n = read_some(client->ssl, client->fd, client->in->data + client->in->len, client->header->payload_len - client->in->len);
 
     if(n < 0) return -1;
     client->in->len += n;
@@ -183,6 +220,9 @@ int main() {
   int fd = run_server();
   if(fd < 0) return -1;
 
+  SSL_CTX *ctx = create_server_ctx();
+  if(!ctx) return -1;
+
   // Poll concurrency
   nfds_t nfd = 2;
   struct pollfd fds[MAX_CLIENTS] = {0};
@@ -199,6 +239,7 @@ int main() {
     int ret = poll(fds, nfd, -1);
     if(ret <= 0) {
       perror("Poll");
+      continue;
     }
 
     if(ret > 0) {
@@ -209,11 +250,39 @@ int main() {
           continue;
         }
 
+        SSL *ssl = SSL_new(ctx);
+        if(!ssl) {
+          ERR_print_errors_fp(stderr);
+          close(cfd);
+          continue;
+        }
+
+        if(SSL_set_fd(ssl, cfd) != 1) {
+          ERR_print_errors_fp(stderr);
+          SSL_free(ssl);
+          close(cfd);
+          continue;
+        }
+
+        if(SSL_accept(ssl) <= 0) {
+          ERR_print_errors_fp(stderr);
+          SSL_free(ssl);
+          close(cfd);
+          continue;
+        }
+
         if(nfd < MAX_CLIENTS) {
           fds[nfd].fd = cfd;
           fds[nfd].events = POLLIN;
           fds[nfd].revents = 0;
-          Client *newClient = create_client(cfd);
+
+          Client *newClient = create_client(cfd, ssl);
+          if(!newClient) {
+            SSL_shutdown(ssl);
+            SSL_free(ssl);
+            close(cfd);
+            continue;
+          }
           clients[nfd] = newClient;
           nfd++;
           printf("Connection success\n");
@@ -257,4 +326,6 @@ int main() {
       }
     }
   }
+
+  SSL_CTX_free(ctx);
 }
