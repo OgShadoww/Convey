@@ -34,13 +34,13 @@ SSL_CTX *create_server_ctx() {
     return NULL;
   }
 
-  if(SSL_CTX_use_certificate_file(ctx, "cert.perm", SSL_FILETYPE_PEM) <= 0) {
+  if(SSL_CTX_use_certificate_file(ctx, "certs/cert.pem", SSL_FILETYPE_PEM) <= 0) {
     ERR_print_errors_fp(stderr);
     SSL_CTX_free(ctx);
     return NULL;
   }
   
-  if(SSL_CTX_use_PrivateKey_file(ctx, "key.perm", SSL_FILETYPE_PEM) <= 0) {
+  if(SSL_CTX_use_PrivateKey_file(ctx, "certs/key.pem", SSL_FILETYPE_PEM) <= 0) {
     ERR_print_errors_fp(stderr);
     SSL_CTX_free(ctx);
     return NULL;
@@ -52,19 +52,22 @@ SSL_CTX *create_server_ctx() {
 int run_server() {
   int fd = socket(AF_INET, SOCK_STREAM, 0);
   if(fd < 0) return -1;
+
+  int opt = 1;
+  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
   
   struct sockaddr_in addr;
   memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
   addr.sin_port = htons(PORT);
-
-  if(inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr) <= 0) return -1;
+  addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
   if(bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) return -1;
 
   if(listen(fd, 128) < 0) return -1;
 
   printf("Listening on 127.0.0.1:8080...\n");
+  fflush(stdout);
 
   return fd;
 }
@@ -141,6 +144,7 @@ void handle_request(Client *client) {
   switch (client->header->type) {
     case MSG_AUTH_LOGIN: {
       printf("Client handle\n");
+      fflush(stdout);
       MsgLogin *l = malloc(sizeof(*l));
       if(!l) {
         perror("Malloc failled");
