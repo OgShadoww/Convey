@@ -5,4 +5,5 @@ server/cert.perm
 server/key.perm
 server/convey.db
 client/client
+client/client.dSYM
 compile_commands.json
