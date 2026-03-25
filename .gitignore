@@ -1,5 +1,8 @@
 server/server
 server/server.dSYM
 server/convey.db
+server/cert.perm
+server/key.perm
+server/convey.db
 client/client
 compile_commands.json
