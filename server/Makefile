@@ -1,10 +1,26 @@
 CC = clang
 TARGET = server
 
-OPENSSL_PREFIX := $(shell brew --prefix openssl@3)
+UNAME_S := $(shell uname -s)
 
-CFLAGS = -Wall -Wextra -g -O0 -I$(OPENSSL_PREFIX)/include
-LDFLAGS = -L$(OPENSSL_PREFIX)/lib -lssl -lcrypto
+# Default flags
+CFLAGS = -Wall -Wextra -g -O0
+LDFLAGS =
+LDLIBS = -lssl -lcrypto
+
+# Flags for macOS
+ifeq ($(UNAME_S),Darwin)
+OPENSSL_PREFIX := $(shell brew --prefix openssl@3)
+CFLAGS += -I$(OPENSSL_PREFIX)/include
+LDFLAGS += -L$(OPENSSL_PREFIX)/lib
+endif
+
+# Linux (APT)
+ifeq ($(UNAME_S),Linux)
+CFLAGS += $(shell pkg-config --cflags openssl)
+LDFLAGS += $(shell pkg-config --libs-only-L openssl)
+LDLIBS = $(shell pkg-config --libs openssl)
+endif
 
 SOURCE = server.c \
 	../protocol/src/protocol_codec.c \
@@ -14,7 +30,7 @@ SOURCE = server.c \
 	../protocol/src/protocol_transport.c
 
 $(TARGET): Makefile $(SOURCE)
-	$(CC) $(CFLAGS) $(SOURCE) $(LDFLAGS) -o $(TARGET)
+	$(CC) $(CFLAGS) $(SOURCE) $(LDFLAGS) $(LDLIBS) -o $(TARGET)
 
 clean:
 	rm -f $(TARGET)
