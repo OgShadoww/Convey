@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 #include "../protocol/include/protocol.h"
 
@@ -13,6 +15,17 @@ static int read_line(char *buf, size_t size) {
   if (fgets(buf, size, stdin) == NULL) return -1;
   buf[strcspn(buf, "\n")] = '\0';
   return 0;
+}
+
+SSL_CTX *create_client_ctf() {
+  SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
+
+  if (!ctx) {
+    ERR_print_errors_fp(stderr);
+    return NULL;
+  }
+
+  return ctx;
 }
 
 int main(void) {
@@ -32,6 +45,32 @@ int main(void) {
 
   if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
     perror("connect");
+    close(fd);
+    return 1;
+  }
+
+  SSL_CTX *ctx = create_client_ctf();
+
+  SSL *ssl = SSL_new(ctx);
+  if(!ssl) {
+    ERR_print_errors_fp(stderr);
+    SSL_CTX_free(ctx);
+    close(fd);
+    return 1;
+  }
+
+  if(SSL_set_fd(ssl, fd) != 1) {
+    ERR_print_errors_fp(stderr);
+    SSL_free(ssl);
+    SSL_CTX_free(ctx);
+    close(fd);
+    return 1;
+  }
+
+  if (SSL_connect(ssl) <= 0) {
+    ERR_print_errors_fp(stderr);
+    SSL_free(ssl);
+    SSL_CTX_free(ctx);
     close(fd);
     return 1;
   }
@@ -99,11 +138,11 @@ int main(void) {
       }
 
       // Send header then payload.
-      if (write_all(fd, header_bytes, CONVEY_HEADER_LEN) < 0) {
+      if (write_some(ssl, fd, header_bytes, CONVEY_HEADER_LEN) < 0) {
         free(payload);
         break;
       }
-      if (write_all(fd, payload, pb.pos) < 0) {
+      if (write_some(ssl, fd, payload, pb.pos) < 0) {
         free(payload);
         break;
       }
