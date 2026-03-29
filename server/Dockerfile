@@ -4,6 +4,7 @@ RUN apt update && apt install -y \
     clang \
     make \
     libssl-dev \
+    libsqlite3-dev \
     pkg-config
 
 WORKDIR /app
@@ -11,7 +12,7 @@ WORKDIR /app
 COPY . .
 
 WORKDIR /app/server
-RUN make
+RUN make clean && make
 
 EXPOSE 8080
 
