@@ -6,6 +6,8 @@ server/certs
 server/data
 server/logs
 server/schema.sql
+server/protocol
+server/build
 client/client
 client/client.dSYM
 compile_commands.json
