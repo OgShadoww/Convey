@@ -9,6 +9,9 @@
 // Login payload rules: The first 16 bits is length of the name, and length of the password after the name
 int decode_payload_login(Buff *b, MsgLogin *p);
 int encode_payload_login(Buff *b, MsgLogin *p);
+int encode_payload_token(Buff *b, uint64_t token);
+int decode_payload_token(Buff *b, uint64_t token);
+void auth_success(uint64_t token);
 
 // OK 
 int send_ok(int fd);

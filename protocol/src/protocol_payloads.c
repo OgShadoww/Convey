@@ -48,6 +48,18 @@ int encode_payload_login(Buff *b, MsgLogin *p) {
   return 0;
 }
 
+int decode_payload_token(Buff *b, uint64_t token) {
+  if(buff_read_u64(b, &token) == -1) return -1;
+
+  return 0;
+}
+
+int encode_payload_token(Buff *b, uint64_t token) {
+  if(buff_write_u64(b, token) == -1) return -1;
+
+  return 0;
+}
+
 // OK 
 int send_ok(int fd) {
   ConveyFrame f = { 

@@ -13,10 +13,11 @@ typedef struct {
 typedef enum {
   MSG_AUTH_REGISTER = 1,
   MSG_AUTH_LOGIN = 2,
-  MSG_GET = 3,
-  MSG_PUT_INIT = 4,
-  MSG_PUT_CHUNK = 5,
-  MSG_PUT_FINISH = 6,
+  MSG_AUTH_SUCCESS = 3,
+  MSG_GET = 4,
+  MSG_PUT_INIT = 5,
+  MSG_PUT_CHUNK = 6,
+  MSG_PUT_FINISH = 7,
   MSG_ERROR = 80,
   MSG_OK = 88
 } ConveyMsgType;
@@ -56,6 +57,10 @@ typedef struct {
   char password[128];
   char confirmed_password[128];
 } MsgRegister;
+
+typedef struct {
+  uint64_t token;
+} MsgAuthSuccess;
 
 typedef struct {
   uint8_t error_type;
