@@ -16,9 +16,9 @@ typedef struct Server {
   Client *clients[MAX_CLIENTS];
 } Server;
 
-int server_init(Server *s);
-int server_run(Server *s);
-int server_accept_one(Server *s);
-void server_free(Server *s);
+int server_init(Server *server);
+int server_run(Server *server);
+int server_accept_one(Server *server);
+void server_free(Server *server);
 
 #endif
